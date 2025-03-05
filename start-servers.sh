@@ -5,7 +5,7 @@ echo "Starting Console Spy servers..."
 
 # Start the console log capture server
 echo "Starting console log capture server on port 3333..."
-node server/mcp-server.js &
+node mcp-server.js &
 CONSOLE_PID=$!
 
 # Wait for the console server to start
