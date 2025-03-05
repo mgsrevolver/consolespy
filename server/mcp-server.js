@@ -20,7 +20,15 @@ try {
   const MAX_LOGS_PER_SESSION = 500; // Increased from 100
 
   console.log('Setting up middleware...');
-  app.use(cors());
+  app.use(
+    cors({
+      origin: '*', // Allow all origins
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+      credentials: true,
+      preflightContinue: false,
+      optionsSuccessStatus: 204,
+    })
+  );
   console.log('CORS middleware added');
 
   app.use(express.json({ limit: '1mb' }));
@@ -67,6 +75,13 @@ try {
               cursor: pointer;
               border-radius: 4px;
             }
+            .manual-logging {
+              margin-top: 30px;
+              padding: 15px;
+              background: #f9f9f9;
+              border: 1px solid #ddd;
+              border-radius: 5px;
+            }
           </style>
         </head>
         <body>
@@ -82,6 +97,17 @@ try {
           <h2>Test Console Logging</h2>
           <p>Click the button below to test console logging:</p>
           <button id="test-log">Test Console Log</button>
+          
+          <div class="manual-logging">
+            <h2>Manual Logging</h2>
+            <p>If automatic console capture isn't working, you can use these manual logging functions:</p>
+            <ul>
+              <li><code>window.mcpLog("Your message here")</code> - Send a log message</li>
+              <li><code>window.mcpWarn("Your warning here")</code> - Send a warning message</li>
+              <li><code>window.mcpError("Your error here")</code> - Send an error message</li>
+            </ul>
+            <p>Example: Open your browser console and type <code>mcpLog("Hello from manual logging")</code></p>
+          </div>
           
           <script>
             document.getElementById('test-log').addEventListener('click', function() {
@@ -173,12 +199,14 @@ try {
         )
         .join('\n');
 
+      // Make sure we're returning the exact format Cursor expects
       res.json({
         content: `Console logs from ${activeSession.url} (${activeSession.logs.length} logs):\n\n${formattedLogs}`,
       });
     } catch (error) {
       console.error('Error processing /mcp request:', error);
-      res.status(500).json({
+      res.status(200).json({
+        // Still return 200 with error message
         content: 'Error retrieving logs: ' + error.message,
       });
     }
@@ -209,6 +237,7 @@ try {
                 <button onclick="location.reload()">Refresh</button>
               </div>
               <p>No logs captured yet. Make sure the console capture script is running.</p>
+              <p><a href="/">Back to home</a></p>
             </body>
           </html>
         `);
@@ -233,18 +262,30 @@ try {
               .session { margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
               .controls { margin-bottom: 20px; }
               .controls button { margin-right: 10px; }
-              .log-content { max-height: 300px; overflow: auto; }
+              .log-content { max-height: 500px; overflow: auto; }
+              .filter { margin-bottom: 15px; }
+              .filter label { margin-right: 10px; }
+              .nav { margin-bottom: 20px; }
+              .nav a { margin-right: 15px; }
             </style>
           </head>
           <body>
             <h1>MCP Logs</h1>
+            <div class="nav">
+              <a href="/">Home</a>
+              <a href="/test">Test Server</a>
+            </div>
             <div class="refresh">
               <button onclick="location.reload()">Refresh</button>
               <span>(Auto-refreshes every 5 seconds)</span>
+              <button onclick="window.location.href='/clear-logs'" style="margin-left: 20px; background-color: #f44336;">Clear All Logs</button>
             </div>
-            <div class="controls">
-              <button onclick="window.location.href='/clear-logs'">Clear All Logs</button>
-              <button onclick="window.location.href='/test'">Test Server</button>
+            <div class="filter">
+              <label><input type="checkbox" class="filter-type" value="log" checked> Logs</label>
+              <label><input type="checkbox" class="filter-type" value="warn" checked> Warnings</label>
+              <label><input type="checkbox" class="filter-type" value="error" checked> Errors</label>
+              <label><input type="checkbox" class="filter-type" value="info" checked> Info</label>
+              <label><input type="checkbox" class="filter-type" value="debug" checked> Debug</label>
             </div>
       `;
 
@@ -275,7 +316,7 @@ try {
               content = String(log.content);
             }
             html += `
-              <div class="log-entry ${log.type}">
+              <div class="log-entry ${log.type}" data-type="${log.type}">
                 <span class="timestamp">[${timestamp}]</span>
                 <span class="${log.type}">${log.type.toUpperCase()}:</span>
                 ${content}
@@ -295,6 +336,18 @@ try {
               setTimeout(() => {
                 location.reload();
               }, 5000);
+              
+              // Set up filtering
+              document.querySelectorAll('.filter-type').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                  const type = this.value;
+                  const checked = this.checked;
+                  
+                  document.querySelectorAll(\`.log-entry[data-type="\${type}"]\`).forEach(entry => {
+                    entry.style.display = checked ? 'block' : 'none';
+                  });
+                });
+              });
             </script>
           </body>
         </html>
@@ -307,54 +360,9 @@ try {
     }
   });
 
-  console.log('Setting up /test endpoint...');
-  // Test endpoint
-  app.get('/test', (req, res) => {
-    console.log('Test endpoint hit!');
-    res.json({ success: true, message: 'Server is running correctly' });
-  });
-
-  // Clear logs endpoint
-  app.get('/clear-logs', (req, res) => {
-    console.log('Clearing all logs...');
-    Object.keys(sessions).forEach((key) => {
-      sessions[key].logs = [];
-    });
-    res.redirect('/view-logs');
-  });
-
-  // Error handling middleware
-  app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  });
-
-  // Start server with error handling
-  console.log('Starting server...');
-  const server = app
-    .listen(port, () => {
-      console.log(`MCP server running at http://localhost:${port}`);
-      console.log(`View logs at http://localhost:${port}/view-logs`);
-    })
-    .on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`Port ${port} is already in use. Try a different port.`);
-        process.exit(1);
-      } else {
-        console.error('Failed to start server:', error);
-        process.exit(1);
-      }
-    });
-
-  // Handle graceful shutdown
-  process.on('SIGINT', () => {
-    console.log('Shutting down server...');
-    server.close(() => {
-      console.log('Server shut down');
-      process.exit(0);
-    });
+  app.listen(port, () => {
+    console.log(`MCP server is running on port ${port}`);
   });
 } catch (error) {
-  console.error('ERROR DURING STARTUP:', error);
-  process.exit(1);
+  console.error('Error initializing MCP server:', error);
 }

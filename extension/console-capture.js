@@ -78,102 +78,49 @@
 
     // Add our own logging to each button
     buttons.forEach((button, index) => {
-      const originalOnClick = button.onclick;
-
-      button.onclick = function (event) {
-        // Log the button click
-        sendDirectLog('log', [
-          `Button clicked: ${
-            button.textContent || button.id || 'Button ' + index
-          }`,
-        ]);
-
-        // Call the original onclick handler if it exists
-        if (originalOnClick) {
-          return originalOnClick.call(this, event);
-        }
-      };
-
-      // Also add a direct event listener
+      // Don't override onclick directly as it might be protected
+      // Just add an event listener
       button.addEventListener('click', function () {
         sendDirectLog('log', [
-          `Button clicked (via addEventListener): ${
+          `Button clicked: ${
             button.textContent || button.id || 'Button ' + index
           }`,
         ]);
       });
     });
 
-    // Inject our own test button
-    const testButton = document.createElement('button');
-    testButton.textContent = 'Test Direct Log';
-    testButton.style.position = 'fixed';
-    testButton.style.bottom = '10px';
-    testButton.style.right = '10px';
-    testButton.style.zIndex = '9999';
-    testButton.style.padding = '10px';
-    testButton.style.background = '#4CAF50';
-    testButton.style.color = 'white';
-    testButton.style.border = 'none';
-    testButton.style.borderRadius = '4px';
-    testButton.style.cursor = 'pointer';
+    // Inject our own test button if we're not on the MCP server page
+    if (!document.getElementById('test-log')) {
+      const testButton = document.createElement('button');
+      testButton.textContent = 'Test Direct Log';
+      testButton.style.position = 'fixed';
+      testButton.style.bottom = '10px';
+      testButton.style.right = '10px';
+      testButton.style.zIndex = '9999';
+      testButton.style.padding = '10px';
+      testButton.style.background = '#4CAF50';
+      testButton.style.color = 'white';
+      testButton.style.border = 'none';
+      testButton.style.borderRadius = '4px';
+      testButton.style.cursor = 'pointer';
 
-    testButton.addEventListener('click', function () {
-      sendDirectLog('log', [
-        'Test log from injected button',
-        new Date().toISOString(),
-      ]);
-      sendDirectLog('warn', ['Test warning from injected button']);
-      sendDirectLog('error', ['Test error from injected button']);
-      alert('Test logs sent directly! Check the MCP server.');
-    });
+      testButton.addEventListener('click', function () {
+        sendDirectLog('log', [
+          'Test log from injected button',
+          new Date().toISOString(),
+        ]);
+        sendDirectLog('warn', ['Test warning from injected button']);
+        sendDirectLog('error', ['Test error from injected button']);
+        alert('Test logs sent directly! Check the MCP server.');
+      });
 
-    document.body.appendChild(testButton);
-
-    // Also try to find and modify any script tags that might be using console.log
-    const scripts = document.querySelectorAll('script');
-    scripts.forEach((script) => {
-      if (script.textContent && script.textContent.includes('console.log')) {
-        origLog(
-          'Found script with console.log:',
-          script.textContent.substring(0, 100)
-        );
-
-        // We can't modify existing scripts, but we can try to inject our own version
-        const newScript = document.createElement('script');
-        newScript.textContent = `
-          (function() {
-            // Replace any console.log calls with our direct logging function
-            const originalConsoleLog = console.log;
-            console.log = function() {
-              if (window.__sendMcpLog) {
-                window.__sendMcpLog('log', ...arguments);
-              }
-              return originalConsoleLog.apply(console, arguments);
-            };
-            
-            // Also replace console.warn and console.error
-            const originalConsoleWarn = console.warn;
-            console.warn = function() {
-              if (window.__sendMcpLog) {
-                window.__sendMcpLog('warn', ...arguments);
-              }
-              return originalConsoleWarn.apply(console, arguments);
-            };
-            
-            const originalConsoleError = console.error;
-            console.error = function() {
-              if (window.__sendMcpLog) {
-                window.__sendMcpLog('error', ...arguments);
-              }
-              return originalConsoleError.apply(console, arguments);
-            };
-          })();
-        `;
-
-        document.head.appendChild(newScript);
+      // Try to add the button, but handle CSP restrictions
+      try {
+        document.body.appendChild(testButton);
+      } catch (e) {
+        origLog('Could not inject test button due to CSP restrictions:', e);
       }
-    });
+    }
 
     // Specifically look for the test button on the MCP server page
     const mcpTestButton = document.getElementById('test-log');
@@ -190,9 +137,6 @@
         sendDirectLog('error', ['Test error from MCP button click']);
       });
     }
-
-    // Send an initial log to test the system
-    sendDirectLog('log', ['Direct capture system initialized and working']);
 
     // Set up a MutationObserver to watch for DOM changes
     const observer = new MutationObserver(function (mutations) {
@@ -227,6 +171,80 @@
       childList: true,
       subtree: true,
     });
+
+    // Less noisy console detection
+    let isCheckingConsole = false;
+    let consoleOpenState = false;
+
+    // Function to check if the console is open (less frequently)
+    function checkConsoleState() {
+      if (isCheckingConsole) return;
+
+      isCheckingConsole = true;
+
+      const startTime = performance.now();
+
+      const endTime = performance.now();
+
+      // If it took more than 20ms, devtools is probably open
+      const newState = endTime - startTime > 20;
+
+      // Only log if the state changed
+      if (newState !== consoleOpenState) {
+        consoleOpenState = newState;
+        sendDirectLog('log', [
+          `Console is now ${consoleOpenState ? 'open' : 'closed'}`,
+        ]);
+      }
+
+      isCheckingConsole = false;
+    }
+
+    // Check console state less frequently
+    setInterval(checkConsoleState, 5000);
+
+    // Also try to capture errors
+    window.addEventListener('error', function (event) {
+      sendDirectLog('error', [
+        'Uncaught error:',
+        event.message,
+        `at ${event.filename}:${event.lineno}:${event.colno}`,
+      ]);
+    });
+
+    // Capture unhandled promise rejections
+    window.addEventListener('unhandledrejection', function (event) {
+      sendDirectLog('error', [
+        'Unhandled promise rejection:',
+        event.reason
+          ? event.reason.message || String(event.reason)
+          : 'Unknown reason',
+      ]);
+    });
+
+    // Send an initial log to test the system
+    sendDirectLog('log', ['ConsoleSpy initialized and working']);
+
+    // Create a simple API for manually logging from the console
+    window.mcpLog = function (message) {
+      sendDirectLog('log', [message]);
+      return 'Log sent to MCP server';
+    };
+
+    window.mcpWarn = function (message) {
+      sendDirectLog('warn', [message]);
+      return 'Warning sent to MCP server';
+    };
+
+    window.mcpError = function (message) {
+      sendDirectLog('error', [message]);
+      return 'Error sent to MCP server';
+    };
+
+    // Log instructions for manual logging
+    origLog(
+      'Manual logging available via window.mcpLog(), window.mcpWarn(), and window.mcpError()'
+    );
 
     // Log that we've set up the direct capture
     origLog('Direct capture system activated');
