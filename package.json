@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "svgexport": "^0.4.2"
+  },
+  "scripts": {
+    "start": "node server/mcp-server.js"
+  }
+}
