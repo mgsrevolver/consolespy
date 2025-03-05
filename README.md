@@ -1,104 +1,123 @@
-# Console Spy MCP Server
+# Console to Cursor MCP
 
-This tool captures browser console logs and makes them available to Cursor IDE through the Model Context Protocol (MCP).
+A tool that captures browser console logs and makes them available in Cursor IDE through the Model Context Protocol (MCP).
+
+## Overview
+
+This tool consists of:
+
+1. A server that captures console logs from your browser
+2. An MCP server that makes these logs available to Cursor
+3. A browser extension that sends console logs to the server
 
 ## Installation
 
 ### Server Setup
 
-1. Make sure you have [Node.js](https://nodejs.org/) installed
-2. Clone or download this repository
-3. Run the setup script:
+1. Clone this repository:
+
+   ```bash
+   git clone https://github.com/mgsrevolver/consolespy.git
+   cd consolespy
    ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Run the setup script to configure the MCP connection for Cursor:
+   ```bash
    ./setup.sh
    ```
 
-### Browser Extension
+### Browser Extension Installation
 
-You need to install the Console to Cursor MCP browser extension:
+1. Install the extension from the Chrome Web Store (coming soon)
 
-- [Chrome Web Store Link](#) (Coming soon)
-- [Firefox Add-ons Link](#) (Coming soon)
+   OR
 
-Alternatively, you can install the extension manually:
+   Load the extension in developer mode:
 
-1. Download the extension ZIP file from the [releases page](#)
-2. For Chrome:
-   - Go to `chrome://extensions/`
-   - Enable "Developer mode" (toggle in the top-right)
-   - Click "Load unpacked" and select the extracted extension folder
-3. For Firefox:
-   - Go to `about:debugging#/runtime/this-firefox`
-   - Click "Load Temporary Add-on" and select the extension ZIP file
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode" (toggle in the top-right corner)
+   - Click "Load unpacked" and select the `extension` folder from this repository
 
 ## Usage
 
-1. Start the servers:
+### Starting the Servers
 
+1. Start the console log server:
+
+   ```bash
+   node mcp-server.js
    ```
-   ./start-servers.sh
+
+2. In a separate terminal, start the MCP server:
+   ```bash
+   npx supergateway --port 8766 --stdio "node console-spy-mcp.js"
    ```
 
-2. Open the project in Cursor IDE:
+Alternatively, you can use the start script to launch both servers at once:
 
-   - The MCP server will be automatically detected and configured thanks to the `.cursor/mcp.json` file
-   - No manual configuration needed!
+```bash
+./start-servers.sh
+```
 
-3. Enable the browser extension:
+### Configuring Cursor
 
-   - Simply click the extension icon in your browser toolbar to toggle it on/off
-   - When active, the extension will automatically send console logs to `http://localhost:3333/console-logs`
-   - There are no settings or configuration options in the extension itself
+After running the setup script, you still need to manually add the MCP server in Cursor:
 
-4. Use in Cursor:
-   - Open the Composer
-   - Ask the agent to get console logs, for example:
-     "Please show me the console logs from my browser"
+1. Go to Settings > Features > MCP in Cursor
+2. Add a new MCP server with:
+   - Name: ConsoleSpy
+   - Type: sse
+   - URL: http://localhost:8766/sse
 
-## Customizing the Port
+### Using the Extension
 
-By default, the console log server runs on port 3333. If you need to use a different port:
+1. Click the extension icon in your browser to toggle it on/off
+2. When enabled, all console logs from the current tab will be sent to the server
+3. In Cursor, you can now access these logs through the MCP interface
 
-1. Edit the `server/mcp-server.js` file and change the port number:
+## Customizing
+
+### Changing the Console Log Server Port
+
+If you need to use a different port for the console log server (default is 3333), you'll need to update the port in multiple places:
+
+1. In `mcp-server.js`, change the port variable:
 
    ```javascript
-   const port = 3333; // Change this to your preferred port
+   const port = 3333; // Change to your desired port
    ```
 
-2. Edit the extension's source code to use your custom port:
+2. In `console-spy-mcp.js`, update the URL to match your new port:
 
-   - Locate the `content.js` file in the extension source
-   - Change the server URL to match your custom port
-   - Reload or reinstall the extension
+   ```javascript
+   const CONSOLE_SERVER_URL = 'http://localhost:3333/mcp'; // Change 3333 to your port
+   ```
 
-3. Make sure to restart the servers after changing the port
+3. In the browser extension's `content.js`, update the server URL:
 
-## How It Works
+   ```javascript
+   const serverUrl = 'http://localhost:3333/console-logs'; // Change 3333 to your port
+   ```
 
-This tool consists of:
+4. If using `start-servers.sh`, update the port reference there as well.
 
-1. A server that captures console logs from the browser extension
-2. An MCP server that makes these logs available to Cursor
-3. A simple browser extension that sends console logs to the server
+**Important:** You must use the same port number in all locations. We recommend doing a global search for "3333" in the project files and replacing all instances with your desired port number to ensure consistency.
 
-The browser extension intercepts all console.log, console.warn, and console.error calls in your web applications and forwards them to the local server. The MCP server then makes these logs available to Cursor's AI assistant for analysis.
+If you're testing locally with another application already using port 3333, changing this port is essential for the tool to work correctly.
 
 ## Troubleshooting
 
 - Make sure both servers are running
-- Check that the browser extension is installed and enabled
-- If you've changed the default port, make sure you've updated both the server and extension
-- Try restarting the servers and Cursor
-- Check the browser console for any extension errors
-
-## Browser Support
-
-The extension works with:
-
-- Google Chrome (version 88+)
-- Microsoft Edge (version 88+)
-- Firefox (version 78+)
+- Verify the browser extension is enabled for the tab you're debugging
+- Check that you've added the MCP server in Cursor's settings
+- If logs aren't appearing, try refreshing the page or restarting the servers
 
 ## License
 
-MIT
+[MIT License](LICENSE)

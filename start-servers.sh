@@ -13,7 +13,7 @@ sleep 2
 
 # Start the MCP server through Supergateway
 echo "Starting MCP server through Supergateway on port 8766..."
-npx supergateway --port 8766 --stdio "node server/console-spy-mcp.js" &
+npx supergateway --port 8766 --stdio "node console-spy-mcp.js" &
 MCP_PID=$!
 
 echo "Both servers are running!"
