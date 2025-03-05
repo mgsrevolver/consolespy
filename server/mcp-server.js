@@ -15,9 +15,9 @@ try {
 
   const port = 3333;
 
-  // In-memory storage for logs
+  // In-memory storage for logs with improved structure
   const sessions = {};
-  const MAX_LOGS_PER_SESSION = 100;
+  const MAX_LOGS_PER_SESSION = 500; // Increased from 100
 
   console.log('Setting up middleware...');
   app.use(cors());
@@ -32,7 +32,7 @@ try {
     // Set strict Content-Security-Policy header
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; style-src 'unsafe-inline'"
+      "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
     );
 
     res.send(`
@@ -54,6 +54,19 @@ try {
               border-radius: 3px; 
               font-family: monospace;
             }
+            button {
+              background: #4CAF50;
+              border: none;
+              color: white;
+              padding: 10px 15px;
+              text-align: center;
+              text-decoration: none;
+              display: inline-block;
+              font-size: 16px;
+              margin: 4px 2px;
+              cursor: pointer;
+              border-radius: 4px;
+            }
           </style>
         </head>
         <body>
@@ -63,7 +76,21 @@ try {
             <li><code>/console-logs</code> - POST endpoint for receiving logs from browser extension</li>
             <li><code>/mcp</code> - GET endpoint for Cursor to retrieve logs</li>
             <li><code>/test</code> - GET endpoint for testing server connectivity</li>
+            <li><code>/view-logs</code> - GET endpoint for viewing logs in browser</li>
           </ul>
+          
+          <h2>Test Console Logging</h2>
+          <p>Click the button below to test console logging:</p>
+          <button id="test-log">Test Console Log</button>
+          
+          <script>
+            document.getElementById('test-log').addEventListener('click', function() {
+              console.log('Test log from button click', new Date().toISOString());
+              console.warn('Test warning from button click');
+              console.error('Test error from button click');
+              alert('Test logs sent! Check the /view-logs endpoint to see them.');
+            });
+          </script>
         </body>
       </html>
     `);
@@ -73,8 +100,6 @@ try {
   // Endpoint to receive logs from browser extension
   app.post('/console-logs', (req, res) => {
     console.log('Received request to /console-logs');
-    console.log('Headers:', req.headers);
-    console.log('Body:', req.body);
 
     try {
       const { logs, sessionId, url } = req.body;
@@ -86,14 +111,20 @@ try {
           .json({ success: false, error: 'Missing required fields' });
       }
 
-      console.log(`Received log from ${url}:`, logs);
+      // Log the content for debugging
+      logs.forEach((log) => {
+        console.log(`Received ${log.type} log from ${url}:`, log.content);
+      });
 
       if (!sessions[sessionId]) {
         sessions[sessionId] = {
           logs: [],
           url: url,
           firstSeen: new Date(),
+          lastSeen: new Date(),
         };
+      } else {
+        sessions[sessionId].lastSeen = new Date();
       }
 
       // Add new logs
@@ -106,7 +137,7 @@ try {
         );
       }
 
-      res.json({ success: true });
+      res.json({ success: true, logCount: sessions[sessionId].logs.length });
     } catch (error) {
       console.error('Error processing /console-logs request:', error);
       res.status(500).json({ success: false, error: 'Server error' });
@@ -117,16 +148,20 @@ try {
   // MCP endpoint for Cursor
   app.get('/mcp', (req, res) => {
     try {
-      const activeSession = Object.values(sessions).sort(
-        (a, b) => new Date(b.firstSeen) - new Date(a.firstSeen)
-      )[0];
+      // Get all sessions sorted by last activity
+      const allSessions = Object.values(sessions).sort(
+        (a, b) => new Date(b.lastSeen) - new Date(a.lastSeen)
+      );
 
-      if (!activeSession) {
+      if (allSessions.length === 0) {
         return res.json({
           content:
             'No console logs captured. Toggle the Console to Cursor extension on your localhost tab.',
         });
       }
+
+      // Use the most recently active session
+      const activeSession = allSessions[0];
 
       // Format logs for Cursor
       const formattedLogs = activeSession.logs
@@ -139,7 +174,7 @@ try {
         .join('\n');
 
       res.json({
-        content: `Console logs from ${activeSession.url}:\n\n${formattedLogs}`,
+        content: `Console logs from ${activeSession.url} (${activeSession.logs.length} logs):\n\n${formattedLogs}`,
       });
     } catch (error) {
       console.error('Error processing /mcp request:', error);
@@ -149,11 +184,143 @@ try {
     }
   });
 
+  // New endpoint to view logs in browser
+  app.get('/view-logs', (req, res) => {
+    try {
+      // Get all sessions sorted by last activity
+      const allSessions = Object.values(sessions).sort(
+        (a, b) => new Date(b.lastSeen) - new Date(a.lastSeen)
+      );
+
+      if (allSessions.length === 0) {
+        return res.send(`
+          <html>
+            <head>
+              <title>MCP Logs</title>
+              <style>
+                body { font-family: sans-serif; padding: 20px; }
+                h1 { color: #333; }
+                .refresh { margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+              <h1>MCP Logs</h1>
+              <div class="refresh">
+                <button onclick="location.reload()">Refresh</button>
+              </div>
+              <p>No logs captured yet. Make sure the console capture script is running.</p>
+            </body>
+          </html>
+        `);
+      }
+
+      // Generate HTML for logs
+      let html = `
+        <html>
+          <head>
+            <title>MCP Logs</title>
+            <style>
+              body { font-family: sans-serif; padding: 20px; }
+              h1, h2 { color: #333; }
+              .refresh { margin-bottom: 20px; }
+              .log-entry { margin-bottom: 5px; font-family: monospace; white-space: pre-wrap; }
+              .log { color: black; }
+              .warn { color: orange; }
+              .error { color: red; }
+              .info { color: blue; }
+              .debug { color: gray; }
+              .timestamp { color: #666; font-size: 0.8em; }
+              .session { margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+              .controls { margin-bottom: 20px; }
+              .controls button { margin-right: 10px; }
+              .log-content { max-height: 300px; overflow: auto; }
+            </style>
+          </head>
+          <body>
+            <h1>MCP Logs</h1>
+            <div class="refresh">
+              <button onclick="location.reload()">Refresh</button>
+              <span>(Auto-refreshes every 5 seconds)</span>
+            </div>
+            <div class="controls">
+              <button onclick="window.location.href='/clear-logs'">Clear All Logs</button>
+              <button onclick="window.location.href='/test'">Test Server</button>
+            </div>
+      `;
+
+      // Add each session
+      allSessions.forEach((session, index) => {
+        const firstSeen = new Date(session.firstSeen).toLocaleString();
+        const lastSeen = new Date(session.lastSeen).toLocaleString();
+
+        html += `
+          <div class="session">
+            <h2>Session ${index + 1}: ${session.url}</h2>
+            <p>First seen: ${firstSeen} | Last seen: ${lastSeen} | Total logs: ${
+          session.logs.length
+        }</p>
+            <div class="log-content">
+        `;
+
+        // Add logs
+        if (session.logs.length === 0) {
+          html += `<p>No logs in this session.</p>`;
+        } else {
+          session.logs.forEach((log) => {
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            let content;
+            try {
+              content = JSON.stringify(log.content, null, 2);
+            } catch (e) {
+              content = String(log.content);
+            }
+            html += `
+              <div class="log-entry ${log.type}">
+                <span class="timestamp">[${timestamp}]</span>
+                <span class="${log.type}">${log.type.toUpperCase()}:</span>
+                ${content}
+              </div>
+            `;
+          });
+        }
+
+        html += `
+            </div>
+          </div>`;
+      });
+
+      html += `
+            <script>
+              // Auto-refresh every 5 seconds
+              setTimeout(() => {
+                location.reload();
+              }, 5000);
+            </script>
+          </body>
+        </html>
+      `;
+
+      res.send(html);
+    } catch (error) {
+      console.error('Error generating logs view:', error);
+      res.status(500).send('Error generating logs view: ' + error.message);
+    }
+  });
+
   console.log('Setting up /test endpoint...');
   // Test endpoint
   app.get('/test', (req, res) => {
     console.log('Test endpoint hit!');
     res.json({ success: true, message: 'Server is running correctly' });
+  });
+
+  // Clear logs endpoint
+  app.get('/clear-logs', (req, res) => {
+    console.log('Clearing all logs...');
+    Object.keys(sessions).forEach((key) => {
+      sessions[key].logs = [];
+    });
+    res.redirect('/view-logs');
   });
 
   // Error handling middleware
@@ -167,6 +334,7 @@ try {
   const server = app
     .listen(port, () => {
       console.log(`MCP server running at http://localhost:${port}`);
+      console.log(`View logs at http://localhost:${port}/view-logs`);
     })
     .on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
