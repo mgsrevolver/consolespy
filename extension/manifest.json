@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Console to Cursor",
+  "name": "ConsoleSpy",
   "version": "1.0",
   "description": "Send console logs to Cursor MCP",
   "permissions": ["activeTab", "scripting"],
