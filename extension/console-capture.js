@@ -41,31 +41,32 @@
 
     // Function to send a log directly to the MCP server
     function sendDirectLog(type, content) {
-      const logEntry = {
-        type: type,
-        content: content,
-        timestamp: new Date().toISOString(),
-      };
-
-      fetch('http://localhost:3333/console-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logs: [logEntry],
-          sessionId: sessionId,
-          url: window.location.href,
-        }),
-      })
-        .then((response) => {
-          if (response.ok) {
-            origLog('Log sent successfully');
-          } else {
-            origLog('Failed to send log:', response.status);
-          }
-        })
-        .catch((err) => {
-          origLog('Error sending log:', err);
+      try {
+        fetch(serverUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type,
+            content,
+            url: window.location.href,
+            timestamp: new Date().toISOString()
+          })
+        }).catch(error => {
+          // Store failed logs in local storage for retry
+          const failedLogs = JSON.parse(localStorage.getItem('failedLogs') || '[]');
+          failedLogs.push({
+            type,
+            content,
+            url: window.location.href,
+            timestamp: new Date().toISOString()
+          });
+          localStorage.setItem('failedLogs', JSON.stringify(failedLogs.slice(-100))); // Keep last 100 logs
         });
+      } catch (error) {
+        // Silent fail in production
+      }
     }
 
     // Create a global function that can be called from anywhere
@@ -248,5 +249,32 @@
 
     // Log that we've set up the direct capture
     origLog('Direct capture system activated');
+
+    function retryFailedLogs() {
+      const failedLogs = JSON.parse(localStorage.getItem('failedLogs') || '[]');
+      if (failedLogs.length === 0) return;
+      
+      const logsToRetry = [...failedLogs];
+      localStorage.setItem('failedLogs', '[]');
+      
+      logsToRetry.forEach(log => {
+        fetch(serverUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(log)
+        }).catch(() => {
+          // If still failing, add back to failed logs
+          const currentFailedLogs = JSON.parse(localStorage.getItem('failedLogs') || '[]');
+          currentFailedLogs.push(log);
+          localStorage.setItem('failedLogs', JSON.stringify(currentFailedLogs));
+        });
+      });
+    }
+
+    // Try to retry logs on page load and periodically
+    retryFailedLogs();
+    setInterval(retryFailedLogs, 60000); // Try every minute
   }
 })();

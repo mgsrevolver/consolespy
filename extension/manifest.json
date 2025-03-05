@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Console to Cursor",
+  "name": "ConsoleSpy",
   "version": "1.0",
   "description": "Send console logs to Cursor MCP",
   "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://localhost:3333/*"],
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
@@ -13,6 +14,18 @@
     "default_title": "Toggle Console Capture"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.min.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["console-capture.min.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }
