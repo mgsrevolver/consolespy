@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ConsoleSpy": {
+      "url": "http://localhost:8765/sse",
+      "tools": [
+        {
+          "name": "getConsoleLogs",
+          "description": "Get console logs from the browser"
+        }
+      ]
+    }
+  }
+}
