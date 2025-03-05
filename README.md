@@ -1,4 +1,4 @@
-# Console to Cursor MCP
+# ConsoleSpy: An MCP Server for Cursor
 
 A tool that captures browser console logs and makes them available in Cursor IDE through the Model Context Protocol (MCP).
 
