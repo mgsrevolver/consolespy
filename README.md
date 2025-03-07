@@ -121,3 +121,7 @@ If you're testing locally with another application already using port 3333, chan
 ## License
 
 [MIT License](LICENSE)
+
+<a href="https://glama.ai/mcp/servers/uVY0ERoHE0">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/uVY0ERoHE0/badge" />
+</a>
