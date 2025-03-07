@@ -34,7 +34,7 @@ This tool consists of:
 
 ### Browser Extension Installation
 
-1. Install the extension from the Chrome Web Store (coming soon)
+1. Install the extension from the [Chrome Web Store](https://chromewebstore.google.com/detail/consolespy/dakkehkpcaahfjembkhchoplffakkcie?authuser=0&hl=en)
 
    OR
 
