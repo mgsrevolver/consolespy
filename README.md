@@ -1,127 +1,34 @@
-# ConsoleSpy: An MCP Server for Cursor
+# ConsoleSpy
 
-A tool that captures browser console logs and makes them available in Cursor IDE through the Model Context Protocol (MCP).
+> **Archived August 2026.** ConsoleSpy piped browser console logs into an AI coding agent back when there was no supported way to do that. There are now several, shipped by the browser and model vendors themselves. Use one of those instead — see below. The code stays up for reference; it is no longer maintained.
 
-## Overview
+## Use these instead
 
-This tool consists of:
+| Tool | Notes |
+| --- | --- |
+| [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) | Google's official server. Console messages with source-mapped stack traces, plus network, performance, and DOM inspection. |
+| [Chrome DevTools auto-connect](https://developer.chrome.com/docs/devtools/agents/use-cases/auto-connect) | Chrome 144+. Attaches the MCP server to the Chrome you already have open, with a per-session permission prompt. No debug port, no separate profile. |
+| [Claude in Chrome](https://code.claude.com/docs/en/chrome) | Anthropic's extension plus native messaging bridge. Run `claude --chrome` and the agent reads console output from your real, logged-in browser. Requires a paid Anthropic plan. |
+| [Safari MCP server](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) | Apple's equivalent for WebKit, shipped July 2026. |
 
-1. A server that captures console logs from your browser
-2. An MCP server that makes these logs available to Cursor
-3. A browser extension that sends console logs to the server
+## What this was
 
-## Installation
+In March 2025, MCP was about four months old and agents were effectively blind to the browser: you debugged by copy-pasting console output into a chat window. ConsoleSpy closed that loop with three pieces — a Chrome extension that hooked `console.*` in the active tab, a local Express collector on port 3333, and an MCP server exposing those logs to Cursor over SSE.
 
-### Server Setup
+## Why it's archived
 
-1. Clone this repository:
+The specific thing ConsoleSpy did that alternatives couldn't was capture logs **passively, from the real browser profile you were already signed into**. That mattered more over time, not less: Chrome 136 blocked remote debugging on default profiles, so every tool built on the Chrome DevTools Protocol had to launch a throwaway profile with none of your sessions in it. An extension didn't have that problem.
 
-   ```bash
-   git clone https://github.com/mgsrevolver/consolespy.git
-   cd consolespy
-   ```
+That gap is now closed from both directions. Chrome 144's auto-connect grants a debugging session against your live browser behind a permission dialog, and Claude in Chrome does it through a native messaging bridge with no port and no MCP configuration at all. Both are first-party, both cover far more than console logs, and neither asks you to run two processes.
 
-2. Install dependencies:
+## What I'd do differently
 
-   ```bash
-   npm install
-   ```
+- **Configuration by find-and-replace.** Port 3333 was hardcoded in four files, and the README's advice was to grep for it. One config value, read once, would have cost nothing.
+- **Two processes and an SSE bridge.** The collector and the MCP server ran separately, glued together with `supergateway`. Plain stdio would have removed both the second process and the manual client setup.
+- **Coupled to one editor instead of the protocol.** The package was named `console-to-cursor-mcp`. MCP's whole point is that the client is interchangeable; the naming and docs should have reflected that.
 
-3. Run the setup script to configure the MCP connection for Cursor:
-   ```bash
-   ./setup.sh
-   ```
-
-### Browser Extension Installation
-
-1. Install the extension from the [Chrome Web Store](https://chromewebstore.google.com/detail/consolespy/dakkehkpcaahfjembkhchoplffakkcie?authuser=0&hl=en)
-
-   OR
-
-   Load the extension in developer mode:
-
-   - Open Chrome and go to `chrome://extensions/`
-   - Enable "Developer mode" (toggle in the top-right corner)
-   - Click "Load unpacked" and select the `extension` folder from this repository
-
-## Usage
-
-### Starting the Servers
-
-1. Start the console log server:
-
-   ```bash
-   node mcp-server.js
-   ```
-
-2. In a separate terminal, start the MCP server:
-   ```bash
-   npx supergateway --port 8766 --stdio "node console-spy-mcp.js"
-   ```
-
-Alternatively, you can use the start script to launch both servers at once:
-
-```bash
-./start-servers.sh
-```
-
-### Configuring Cursor
-
-After running the setup script, you still need to manually add the MCP server in Cursor:
-
-1. Go to Settings > Features > MCP in Cursor
-2. Add a new MCP server with:
-   - Name: ConsoleSpy
-   - Type: sse
-   - URL: http://localhost:8766/sse
-
-### Using the Extension
-
-1. Click the extension icon in your browser to toggle it on/off
-2. When enabled, all console logs from the current tab will be sent to the server
-3. In Cursor, you can now access these logs through the MCP interface
-
-## Customizing
-
-### Changing the Console Log Server Port
-
-If you need to use a different port for the console log server (default is 3333), you'll need to update the port in multiple places:
-
-1. In `mcp-server.js`, change the port variable:
-
-   ```javascript
-   const port = 3333; // Change to your desired port
-   ```
-
-2. In `console-spy-mcp.js`, update the URL to match your new port:
-
-   ```javascript
-   const CONSOLE_SERVER_URL = 'http://localhost:3333/mcp'; // Change 3333 to your port
-   ```
-
-3. In the browser extension's `content.js`, update the server URL:
-
-   ```javascript
-   const serverUrl = 'http://localhost:3333/console-logs'; // Change 3333 to your port
-   ```
-
-4. If using `start-servers.sh`, update the port reference there as well.
-
-**Important:** You must use the same port number in all locations. We recommend doing a global search for "3333" in the project files and replacing all instances with your desired port number to ensure consistency.
-
-If you're testing locally with another application already using port 3333, changing this port is essential for the tool to work correctly.
-
-## Troubleshooting
-
-- Make sure both servers are running
-- Verify the browser extension is enabled for the tab you're debugging
-- Check that you've added the MCP server in Cursor's settings
-- If logs aren't appearing, try refreshing the page or restarting the servers
+One problem from 2025 does remain unsolved, and it's the interesting one: console and network output floods an agent's context window. Anthropic's own docs now advise telling the agent which patterns to look for, "since logs can be verbose." Capture was the easy half. Triage — deduplicating by stack signature, diffing against a clean baseline, surfacing only what changed since the last edit — is still mostly manual.
 
 ## License
 
-[MIT License](LICENSE)
-
-<a href="https://glama.ai/mcp/servers/uVY0ERoHE0">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/uVY0ERoHE0/badge" />
-</a>
+[MIT](LICENSE)
